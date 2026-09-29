@@ -4,5 +4,5 @@
 window.COACH_RX_CONFIG = {
   url: "https://yijsgmunsqlqnvbincsy.supabase.co",
   publicKey: "",  // pode ficar vazio
-  integrationsEnabled: false  // true só depois de ativar a conexão do Strava pelo servidor (INTEGRACOES.md)
+  integrationsEnabled: true   // conexão do Strava pelo servidor (função athlete-integrations)
 };
