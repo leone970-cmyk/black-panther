@@ -3,11 +3,16 @@
 //    primeiro (versão nova sempre que tem internet) e, sem internet ou com a rede travada, saem da cópia guardada.
 //    As bibliotecas fixas (React, Supabase, fontes do Google) ficam guardadas e saem da cópia.
 //    Nunca guarda dados: chamadas ao Supabase, Strava, IA, imagens de outros sites e qualquer .json passam direto pela rede.
+//    App instalado (UltraHybrid): o manifesto vai pela rede primeiro; os ícones têm nome com versão (uh-…-v1.png) e
+//    saem da cópia (ícone novo = nome novo, então nunca fica preso no antigo).
 // 2) Avisos do cronômetro: tocar no aviso volta para a aba do app que mandou.
-const V='bp-site-v1';   // trocar o número apaga a cópia antiga no próximo acesso
+const V='bp-site-v2';   // trocar o número apaga a cópia antiga no próximo acesso
 const SCOPE=self.registration.scope;   // https://ultrahybrid.com.br/ ou https://leone970-cmyk.github.io/black-panther/
 const ROOT=new URL(SCOPE).pathname;
 const HOME=new URL('./',SCOPE).href,BANCO=new URL('banco.html',SCOPE).href,CONFIG=new URL('config.js',SCOPE).href;
+const MANIFEST=new URL('manifest.webmanifest',SCOPE).href;
+const ICONS=['uh-icon-192-v1.png','uh-icon-512-v1.png','uh-maskable-192-v1.png','uh-maskable-512-v1.png','uh-apple-180-v1.png','uh-favicon-32-v1.png','uh-favicon-16-v1.png','uh-favicon-v1.ico'].map(f=>new URL(f,SCOPE).href);
+const ICON_RX=/^(uh-[a-z0-9-]+\.(png|ico)|favicon\.ico)$/;
 const LIBS=['https://unpkg.com/react@18.3.1/umd/react.production.min.js','https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js','https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2'];
 const LIB_HOSTS=['unpkg.com','cdn.jsdelivr.net','fonts.googleapis.com','fonts.gstatic.com'];
 
@@ -17,7 +22,8 @@ async function keep(key,res){try{const c=await caches.open(V);await c.put(key,re
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil((async()=>{
   const c=await caches.open(V);
   await Promise.all([
-    ...[HOME,BANCO,CONFIG].map(u=>fetch(new Request(u,{cache:'no-cache'})).then(r=>okPage(r)?c.put(u,r):null).catch(()=>null)),
+    ...[HOME,BANCO,CONFIG,MANIFEST].map(u=>fetch(new Request(u,{cache:'no-cache'})).then(r=>okPage(r)?c.put(u,r):null).catch(()=>null)),
+    ...ICONS.map(u=>c.match(u).then(h=>h||fetch(u).then(r=>okPage(r)?c.put(u,r):null)).catch(()=>null)),
     ...LIBS.map(u=>c.match(u).then(h=>h||fetch(new Request(u,{mode:'cors',credentials:'omit'})).then(r=>r.ok?c.put(u,r):null)).catch(()=>null))]);
 })());});
 self.addEventListener('activate',e=>e.waitUntil((async()=>{
@@ -33,6 +39,11 @@ async function netFirst(req,key,ms){
   if(!hit)return net;
   return new Promise(res=>{let done=false;const t=setTimeout(()=>{if(!done){done=true;res(hit);}},ms);
     net.then(r=>{if(done)return;done=true;clearTimeout(t);res(r.ok||r.type==='opaqueredirect'?r:hit);},()=>{if(done)return;done=true;clearTimeout(t);res(hit);});});
+}
+// ícone com versão no nome: cópia guardada primeiro (mesmo site)
+async function iconFirst(req){
+  const c=await caches.open(V),hit=await c.match(req.url,{ignoreSearch:true});if(hit)return hit;
+  const r=await fetch(req);if(okPage(r))keep(req.url,r.clone());return r;
 }
 // biblioteca com versão fixa: cópia guardada primeiro; se não tem, busca (com CORS, para não guardar resposta opaca)
 async function cacheFirst(req){
@@ -50,6 +61,8 @@ self.addEventListener('fetch',e=>{
       return;
     }
     if(u.pathname===ROOT+'config.js')e.respondWith(netFirst(req,CONFIG,3000));
+    else if(u.pathname===ROOT+'manifest.webmanifest')e.respondWith(netFirst(req,MANIFEST,3000));
+    else if(u.pathname.startsWith(ROOT)&&ICON_RX.test(u.pathname.slice(ROOT.length)))e.respondWith(iconFirst(req));
     return;
   }
   const lib=LIB_HOSTS.includes(u.hostname)&&(u.hostname.startsWith('fonts.')||/@\d/.test(u.pathname));
